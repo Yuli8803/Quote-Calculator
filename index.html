@@ -218,6 +218,13 @@
   }
   .addl-body.active{opacity:1; filter:none; pointer-events:auto;}
   .addl-body .grid2{display:grid; grid-template-columns: 1fr 100px; gap:8px;}
+  .disc-target{display:flex; gap:6px;}
+  .disc-target-btn{
+    flex:1; padding:8px 10px; border-radius:6px; border:1.3px solid var(--line);
+    background:#fff; color:var(--steel); font-family:var(--font-body); font-size:13px;
+    font-weight:600; cursor:pointer;
+  }
+  .disc-target-btn.active{background:var(--asphalt); border-color:var(--asphalt); color:var(--paper);}
   .addl-body input{
     font-family:var(--font-body); font-size:16px; padding:9px 10px;
     border-radius:6px; border:1.3px solid var(--line); background:#fff; width:100%;
@@ -329,19 +336,28 @@
       <div id="partsList"></div>
       <div class="empty-note" id="partsEmptyNote">No parts added yet.</div>
 
-      <div class="section-label">Travel Fee</div>
-      <div class="field-row">
-        <div>
-          <div class="flabel">Within 20-mile radius?</div>
-        </div>
+      <div class="section-label">
+        Travel Fee
         <label class="switch">
-          <input type="checkbox" id="withinRadius" checked>
+          <input type="checkbox" id="noTravelToggle">
           <span class="slider"></span>
         </label>
       </div>
-      <div class="miles-block" id="milesBlock">
-        <label class="flabel" style="font-size:12.5px; color:var(--steel);">Total miles for this job</label>
-        <input type="number" min="0" step="1" id="milesInput" placeholder="e.g. 35" style="margin-top:6px;">
+      <p style="font-size:11.5px; color:var(--steel); margin:-4px 0 8px;">Toggle on for no charge to this customer</p>
+      <div id="travelRadiusBlock">
+        <div class="field-row">
+          <div>
+            <div class="flabel">Within 20-mile radius?</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="withinRadius" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="miles-block" id="milesBlock">
+          <label class="flabel" style="font-size:12.5px; color:var(--steel);">Total miles for this job</label>
+          <input type="number" min="0" step="1" id="milesInput" placeholder="e.g. 35" style="margin-top:6px;">
+        </div>
       </div>
       <div class="field-row" style="margin-top:6px;">
         <div class="flabel">Travel fee<span class="fnote" id="travelNote">Base $20, within radius</span></div>
@@ -383,9 +399,13 @@
         </label>
       </div>
       <div class="addl-body" id="discBody">
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div class="disc-target" id="discTarget">
+          <button type="button" class="disc-target-btn active" data-target="parts">Parts</button>
+          <button type="button" class="disc-target-btn" data-target="labor">Labor</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
           <input type="number" id="discPct" placeholder="0" min="0" max="100" style="width:90px; text-align:center;">
-          <span style="font-size:13px; color:var(--steel);">% off parts + labor</span>
+          <span style="font-size:13px; color:var(--steel);">% off</span>
         </div>
       </div>
 
@@ -501,7 +521,10 @@
       '<input type="number" placeholder="0.00" min="0" step="0.01" class="p-cost" value="'+(cost!==undefined?cost:'')+'">' +
       '<button class="rm" aria-label="Remove part">×</button>';
     partsList.appendChild(row);
-    row.querySelector('.p-name').addEventListener('input', recalc);
+    row.querySelector('.p-name').addEventListener('input', function(){
+      this.style.borderColor = '';
+      recalc();
+    });
     row.querySelector('.p-cost').addEventListener('input', recalc);
     row.querySelector('.rm').addEventListener('click', function(){
       row.remove();
@@ -523,20 +546,38 @@
   var milesBlock = document.getElementById('milesBlock');
   var milesInput = document.getElementById('milesInput');
   var travelNote = document.getElementById('travelNote');
+  var noTravelToggle = document.getElementById('noTravelToggle');
+  var travelRadiusBlock = document.getElementById('travelRadiusBlock');
 
   withinRadius.addEventListener('change', function(){
     if(withinRadius.checked){
       milesBlock.classList.remove('show');
-      travelNote.textContent = 'Base $20, within radius';
+      if(!noTravelToggle.checked) travelNote.textContent = 'Base $20, within radius';
     } else {
       milesBlock.classList.add('show');
-      travelNote.textContent = '$20 base + $1.75/mile past 20';
+      if(!noTravelToggle.checked) travelNote.textContent = '$20 base + $1.75/mile past 20';
     }
     recalc();
   });
   milesInput.addEventListener('input', recalc);
 
+  noTravelToggle.addEventListener('change', function(){
+    if(noTravelToggle.checked){
+      travelRadiusBlock.style.opacity = '0.35';
+      travelRadiusBlock.style.filter = 'grayscale(0.4)';
+      travelRadiusBlock.style.pointerEvents = 'none';
+      travelNote.textContent = 'No charge for this customer';
+    } else {
+      travelRadiusBlock.style.opacity = '';
+      travelRadiusBlock.style.filter = '';
+      travelRadiusBlock.style.pointerEvents = '';
+      travelNote.textContent = withinRadius.checked ? 'Base $20, within radius' : '$20 base + $1.75/mile past 20';
+    }
+    recalc();
+  });
+
   function computeTravel(){
+    if(noTravelToggle.checked) return 0;
     if(withinRadius.checked) return 20;
     var miles = parseFloat(milesInput.value);
     if(isNaN(miles) || miles < 0) miles = 0;
@@ -591,6 +632,16 @@
   var discToggle = document.getElementById('discToggle');
   var discBody = document.getElementById('discBody');
   var discPct = document.getElementById('discPct');
+  var discTarget = 'parts';
+  var discTargetBtns = document.querySelectorAll('.disc-target-btn');
+
+  discTargetBtns.forEach(function(btn){
+    btn.addEventListener('click', function(){
+      discTarget = btn.dataset.target;
+      discTargetBtns.forEach(function(b){ b.classList.toggle('active', b===btn); });
+      recalc();
+    });
+  });
 
   discToggle.addEventListener('change', function(){
     if(discToggle.checked){ discBody.classList.add('active'); }
@@ -624,13 +675,32 @@
 
   var sendBtn = document.getElementById('sendBtn');
 
+  function validatePartNames(){
+    var rows = partsList.querySelectorAll('.part-row');
+    var valid = true;
+    var firstInvalid = null;
+    rows.forEach(function(r){
+      var nameInput = r.querySelector('.p-name');
+      var name = nameInput.value.trim();
+      if(name === ''){
+        valid = false;
+        nameInput.style.borderColor = '#a5372a';
+        if(!firstInvalid) firstInvalid = nameInput;
+      } else {
+        nameInput.style.borderColor = '';
+      }
+    });
+    return {valid:valid, firstInvalid:firstInvalid};
+  }
+
   function recalc(){
     var parts = computeParts();
     var travel = computeTravel();
     var labor = computeLabor();
     var addl = computeAddl();
     var discPctVal = computeDiscountPct();
-    var discount = (parts.total + labor) * (discPctVal/100);
+    var discBase = (discTarget === 'labor') ? labor : parts.total;
+    var discount = discBase * (discPctVal/100);
     var grand = parts.total + travel + labor + addl - discount;
 
     document.getElementById('travelFeeVal').textContent = money(travel);
@@ -649,7 +719,7 @@
     document.getElementById('sumGrand').textContent = money(grand);
 
     saveDraft();
-    return {parts:parts, travel:travel, labor:labor, addl:addl, discPct:discPctVal, discount:discount, grand:grand};
+    return {parts:parts, travel:travel, labor:labor, addl:addl, discPct:discPctVal, discTarget:discTarget, discount:discount, grand:grand};
   }
 
   /* ---------- draft persistence (survives closing the app mid-quote) ---------- */
@@ -662,13 +732,15 @@
       parts: rows,
       withinRadius: withinRadius.checked,
       miles: milesInput.value,
+      noTravel: noTravelToggle.checked,
       hrs: laborHrs.value,
       min: laborMin.value,
       addlOn: addlToggle.checked,
       addlDesc: addlDesc.value,
       addlAmt: addlAmt.value,
       discOn: discToggle.checked,
-      discPct: discPct.value
+      discPct: discPct.value,
+      discTarget: discTarget
     });
   }
   function restoreDraft(){
@@ -682,6 +754,13 @@
     withinRadius.checked = (d.withinRadius !== false);
     if(!withinRadius.checked) milesBlock.classList.add('show');
     milesInput.value = d.miles || '';
+    noTravelToggle.checked = !!d.noTravel;
+    if(noTravelToggle.checked){
+      travelRadiusBlock.style.opacity = '0.35';
+      travelRadiusBlock.style.filter = 'grayscale(0.4)';
+      travelRadiusBlock.style.pointerEvents = 'none';
+      travelNote.textContent = 'No charge for this customer';
+    }
     laborHrs.value = d.hrs || '';
     laborMin.value = d.min || '';
     addlToggle.checked = !!d.addlOn;
@@ -691,6 +770,8 @@
     discToggle.checked = !!d.discOn;
     if(discToggle.checked) discBody.classList.add('active');
     discPct.value = d.discPct || '';
+    discTarget = d.discTarget === 'labor' ? 'labor' : 'parts';
+    discTargetBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.target === discTarget); });
   }
 
   function clearQuoteForm(){
@@ -698,6 +779,10 @@
     addPartRow();
     withinRadius.checked = true;
     milesBlock.classList.remove('show');
+    noTravelToggle.checked = false;
+    travelRadiusBlock.style.opacity = '';
+    travelRadiusBlock.style.filter = '';
+    travelRadiusBlock.style.pointerEvents = '';
     travelNote.textContent = 'Base $20, within radius';
     milesInput.value = '';
     laborHrs.value = '';
@@ -709,6 +794,8 @@
     discToggle.checked = false;
     discBody.classList.remove('active');
     discPct.value = '';
+    discTarget = 'parts';
+    discTargetBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.target === 'parts'); });
     document.getElementById('statusMsg').textContent = '';
     document.getElementById('statusMsg').className = 'status-msg';
     recalc();
@@ -733,6 +820,7 @@
       labor: calc.labor,
       addl: calc.addl,
       discPct: calc.discPct,
+      discTarget: calc.discTarget,
       discount: calc.discount,
       grand: calc.grand
     });
@@ -763,7 +851,7 @@
           'Labor: '+money(q.labor)+'<br>'+
           'Travel Fee: '+money(q.travel)+
           (q.addl ? '<br>Additional: '+money(q.addl) : '') +
-          (q.discount ? '<br>Discount ('+q.discPct+'%): -'+money(q.discount) : '') +
+          (q.discount ? '<br>Discount ('+q.discPct+'% off '+(q.discTarget==='labor'?'labor':'parts')+'): -'+money(q.discount) : '') +
         '</div>';
       histList.appendChild(el);
     });
@@ -803,13 +891,21 @@
     lines.push('Labor: ' + money(calc.labor));
     lines.push('Travel Fee: ' + money(calc.travel));
     if(calc.addl) lines.push('Additional: ' + money(calc.addl) + (addlDesc.value.trim() ? ' (' + addlDesc.value.trim() + ')' : ''));
-    if(calc.discount) lines.push('Discount (' + calc.discPct + '% off parts + labor): -' + money(calc.discount));
+    if(calc.discount) lines.push('Discount (' + calc.discPct + '% off ' + (calc.discTarget==='labor'?'labor':'parts') + '): -' + money(calc.discount));
     lines.push('');
     lines.push('TOTAL: ' + money(calc.grand));
     return lines.join('\n');
   }
 
   sendBtn.addEventListener('click', function(){
+    var check = validatePartNames();
+    if(!check.valid){
+      statusMsg.textContent = 'Please enter a name for each part.';
+      statusMsg.className = 'status-msg err';
+      if(check.firstInvalid) check.firstInvalid.focus();
+      return;
+    }
+
     var calc = recalc();
 
     // Save immediately — the person using the app should only ever see
