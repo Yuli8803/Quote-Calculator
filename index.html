@@ -218,13 +218,10 @@
   }
   .addl-body.active{opacity:1; filter:none; pointer-events:auto;}
   .addl-body .grid2{display:grid; grid-template-columns: 1fr 100px; gap:8px;}
-  .disc-target{display:flex; gap:6px;}
-  .disc-target-btn{
-    flex:1; padding:8px 10px; border-radius:6px; border:1.3px solid var(--line);
-    background:#fff; color:var(--steel); font-family:var(--font-body); font-size:13px;
-    font-weight:600; cursor:pointer;
-  }
-  .disc-target-btn.active{background:var(--asphalt); border-color:var(--asphalt); color:var(--paper);}
+  .disc-row{display:flex; align-items:center; gap:8px;}
+  .disc-label{font-size:13px; font-weight:600; color:var(--ink); width:44px; flex-shrink:0;}
+  .disc-row input{width:70px !important; text-align:center;}
+  .disc-pct{font-size:13px; color:var(--steel);}
   .addl-body input{
     font-family:var(--font-body); font-size:16px; padding:9px 10px;
     border-radius:6px; border:1.3px solid var(--line); background:#fff; width:100%;
@@ -399,13 +396,15 @@
         </label>
       </div>
       <div class="addl-body" id="discBody">
-        <div class="disc-target" id="discTarget">
-          <button type="button" class="disc-target-btn active" data-target="parts">Parts</button>
-          <button type="button" class="disc-target-btn" data-target="labor">Labor</button>
+        <div class="disc-row">
+          <span class="disc-label">Parts</span>
+          <input type="number" id="discPctParts" placeholder="0" min="0" max="100">
+          <span class="disc-pct">% off</span>
         </div>
-        <div style="display:flex; align-items:center; gap:8px; margin-top:8px;">
-          <input type="number" id="discPct" placeholder="0" min="0" max="100" style="width:90px; text-align:center;">
-          <span style="font-size:13px; color:var(--steel);">% off</span>
+        <div class="disc-row" style="margin-top:8px;">
+          <span class="disc-label">Labor</span>
+          <input type="number" id="discPctLabor" placeholder="0" min="0" max="100">
+          <span class="disc-pct">% off</span>
         </div>
       </div>
 
@@ -414,7 +413,8 @@
         <div class="trow"><div>Labor</div><div class="v" id="sumLabor">$0.00</div></div>
         <div class="trow"><div>Travel Fee</div><div class="v" id="sumTravel">$20.00</div></div>
         <div class="trow"><div>Additional</div><div class="v" id="sumAddl">$0.00</div></div>
-        <div class="trow" id="discRow" style="display:none;"><div>Discount</div><div class="v" id="sumDisc">-$0.00</div></div>
+        <div class="trow" id="discRowParts" style="display:none;"><div>Parts Discount</div><div class="v" id="sumDiscParts">-$0.00</div></div>
+        <div class="trow" id="discRowLabor" style="display:none;"><div>Labor Discount</div><div class="v" id="sumDiscLabor">-$0.00</div></div>
         <div class="grand"><div class="l">Total</div><div class="v" id="sumGrand">$20.00</div></div>
       </div>
 
@@ -631,31 +631,31 @@
   /* ---------- discount ---------- */
   var discToggle = document.getElementById('discToggle');
   var discBody = document.getElementById('discBody');
-  var discPct = document.getElementById('discPct');
-  var discTarget = 'parts';
-  var discTargetBtns = document.querySelectorAll('.disc-target-btn');
-
-  discTargetBtns.forEach(function(btn){
-    btn.addEventListener('click', function(){
-      discTarget = btn.dataset.target;
-      discTargetBtns.forEach(function(b){ b.classList.toggle('active', b===btn); });
-      recalc();
-    });
-  });
+  var discPctParts = document.getElementById('discPctParts');
+  var discPctLabor = document.getElementById('discPctLabor');
 
   discToggle.addEventListener('change', function(){
     if(discToggle.checked){ discBody.classList.add('active'); }
-    else { discBody.classList.remove('active'); discPct.value=''; }
+    else { discBody.classList.remove('active'); discPctParts.value=''; discPctLabor.value=''; }
     recalc();
   });
-  discPct.addEventListener('input', recalc);
+  discPctParts.addEventListener('input', recalc);
+  discPctLabor.addEventListener('input', recalc);
 
-  function computeDiscountPct(){
-    if(!discToggle.checked) return 0;
-    var v = parseFloat(discPct.value);
+  function clampPct(v){
+    v = parseFloat(v);
     if(isNaN(v) || v<0) v = 0;
     if(v>100) v = 100;
     return v;
+  }
+
+  function computePartsDiscPct(){
+    if(!discToggle.checked) return 0;
+    return clampPct(discPctParts.value);
+  }
+  function computeLaborDiscPct(){
+    if(!discToggle.checked) return 0;
+    return clampPct(discPctLabor.value);
   }
 
   /* ---------- totals ---------- */
@@ -698,10 +698,12 @@
     var travel = computeTravel();
     var labor = computeLabor();
     var addl = computeAddl();
-    var discPctVal = computeDiscountPct();
-    var discBase = (discTarget === 'labor') ? labor : parts.total;
-    var discount = discBase * (discPctVal/100);
-    var grand = parts.total + travel + labor + addl - discount;
+    var partsDiscPct = computePartsDiscPct();
+    var laborDiscPct = computeLaborDiscPct();
+    var partsDiscount = parts.total * (partsDiscPct/100);
+    var laborDiscount = labor * (laborDiscPct/100);
+    var totalDiscount = partsDiscount + laborDiscount;
+    var grand = parts.total + travel + labor + addl - totalDiscount;
 
     document.getElementById('travelFeeVal').textContent = money(travel);
     document.getElementById('laborCostVal').textContent = money(labor);
@@ -709,17 +711,31 @@
     document.getElementById('sumTravel').textContent = money(travel);
     document.getElementById('sumLabor').textContent = money(labor);
     document.getElementById('sumAddl').textContent = money(addl);
-    var discRow = document.getElementById('discRow');
-    if(discount > 0){
-      discRow.style.display = '';
-      document.getElementById('sumDisc').textContent = '-' + money(discount);
+
+    var discRowParts = document.getElementById('discRowParts');
+    if(partsDiscount > 0){
+      discRowParts.style.display = '';
+      document.getElementById('sumDiscParts').textContent = '-' + money(partsDiscount);
     } else {
-      discRow.style.display = 'none';
+      discRowParts.style.display = 'none';
     }
+    var discRowLabor = document.getElementById('discRowLabor');
+    if(laborDiscount > 0){
+      discRowLabor.style.display = '';
+      document.getElementById('sumDiscLabor').textContent = '-' + money(laborDiscount);
+    } else {
+      discRowLabor.style.display = 'none';
+    }
+
     document.getElementById('sumGrand').textContent = money(grand);
 
     saveDraft();
-    return {parts:parts, travel:travel, labor:labor, addl:addl, discPct:discPctVal, discTarget:discTarget, discount:discount, grand:grand};
+    return {
+      parts:parts, travel:travel, labor:labor, addl:addl,
+      partsDiscPct:partsDiscPct, laborDiscPct:laborDiscPct,
+      partsDiscount:partsDiscount, laborDiscount:laborDiscount,
+      discount:totalDiscount, grand:grand
+    };
   }
 
   /* ---------- draft persistence (survives closing the app mid-quote) ---------- */
@@ -739,8 +755,8 @@
       addlDesc: addlDesc.value,
       addlAmt: addlAmt.value,
       discOn: discToggle.checked,
-      discPct: discPct.value,
-      discTarget: discTarget
+      discPctParts: discPctParts.value,
+      discPctLabor: discPctLabor.value
     });
   }
   function restoreDraft(){
@@ -769,9 +785,8 @@
     addlAmt.value = d.addlAmt || '';
     discToggle.checked = !!d.discOn;
     if(discToggle.checked) discBody.classList.add('active');
-    discPct.value = d.discPct || '';
-    discTarget = d.discTarget === 'labor' ? 'labor' : 'parts';
-    discTargetBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.target === discTarget); });
+    discPctParts.value = d.discPctParts || '';
+    discPctLabor.value = d.discPctLabor || '';
   }
 
   function clearQuoteForm(){
@@ -793,9 +808,8 @@
     addlAmt.value = '';
     discToggle.checked = false;
     discBody.classList.remove('active');
-    discPct.value = '';
-    discTarget = 'parts';
-    discTargetBtns.forEach(function(b){ b.classList.toggle('active', b.dataset.target === 'parts'); });
+    discPctParts.value = '';
+    discPctLabor.value = '';
     document.getElementById('statusMsg').textContent = '';
     document.getElementById('statusMsg').className = 'status-msg';
     recalc();
@@ -819,8 +833,10 @@
       travel: calc.travel,
       labor: calc.labor,
       addl: calc.addl,
-      discPct: calc.discPct,
-      discTarget: calc.discTarget,
+      partsDiscPct: calc.partsDiscPct,
+      laborDiscPct: calc.laborDiscPct,
+      partsDiscount: calc.partsDiscount,
+      laborDiscount: calc.laborDiscount,
       discount: calc.discount,
       grand: calc.grand
     });
@@ -851,7 +867,8 @@
           'Labor: '+money(q.labor)+'<br>'+
           'Travel Fee: '+money(q.travel)+
           (q.addl ? '<br>Additional: '+money(q.addl) : '') +
-          (q.discount ? '<br>Discount ('+q.discPct+'% off '+(q.discTarget==='labor'?'labor':'parts')+'): -'+money(q.discount) : '') +
+          (q.partsDiscount ? '<br>Parts Discount ('+q.partsDiscPct+'%): -'+money(q.partsDiscount) : '') +
+          (q.laborDiscount ? '<br>Labor Discount ('+q.laborDiscPct+'%): -'+money(q.laborDiscount) : '') +
         '</div>';
       histList.appendChild(el);
     });
@@ -891,7 +908,8 @@
     lines.push('Labor: ' + money(calc.labor));
     lines.push('Travel Fee: ' + money(calc.travel));
     if(calc.addl) lines.push('Additional: ' + money(calc.addl) + (addlDesc.value.trim() ? ' (' + addlDesc.value.trim() + ')' : ''));
-    if(calc.discount) lines.push('Discount (' + calc.discPct + '% off ' + (calc.discTarget==='labor'?'labor':'parts') + '): -' + money(calc.discount));
+    if(calc.partsDiscount) lines.push('Parts Discount (' + calc.partsDiscPct + '%): -' + money(calc.partsDiscount));
+    if(calc.laborDiscount) lines.push('Labor Discount (' + calc.laborDiscPct + '%): -' + money(calc.laborDiscount));
     lines.push('');
     lines.push('TOTAL: ' + money(calc.grand));
     return lines.join('\n');
